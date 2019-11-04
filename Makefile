@@ -21,6 +21,21 @@ VERSION = 0.0.1
 client:
 	$(GOCGO) build $(GOFLAGS) -ldflags "-X main.VERSION=$(VERSION)" -o ./build/$(ARCH)/ha-slave ./cmd/client
 
+.PHONY: mqtt-exporter cloud-build cloud-run cloud-stop
+mqtt-exporter:
+	$(GOCGO) build $(GOFLAGS) -ldflags "-X main.VERSION=$(VERSION)" -o ./build/$(ARCH)/mqtt-exporter ./cmd/cloud
+cloud-build:
+	docker build \
+		-t moxaisd/mqtt-exporter \
+		--build-arg ARCH=$(ARCH) \
+		--add-host repo.isd.moxa.com:10.144.29.201 \
+		-f cmd/cloud/Dockerfile \
+		.
+cloud-run:
+	docker-compose -f cmd/cloud/docker-compose.yml up -d
+cloud-stop:
+	docker-compose -f cmd/cloud/docker-compose.yml down
+
 .PHONY: test/dev test
 test/dev:
 	docker build \
