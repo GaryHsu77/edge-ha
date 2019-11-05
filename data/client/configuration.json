@@ -23,7 +23,7 @@
     ],
     "mqtt":{
         "addr":"localhost:1883",
-        "topic": "/dev1",
+        "topic": "/tags",
         "clientId": "mydev1",
         "cleanSession": true,
         "qos":0

@@ -95,7 +95,7 @@ func main() {
 				time.Now().Format(time.RFC3339),
 			}
 			o, _ := json.Marshal(i)
-			token := mqttClient.Publish(conf.Mqtt.Topic, byte(conf.Mqtt.Qos), false, o)
+			token := mqttClient.Publish(fmt.Sprintf("devs/%s/tags/%s", conf.Mqtt.ClientID, t.TagName), byte(conf.Mqtt.Qos), false, o)
 			token.Wait()
 			time.Sleep(time.Duration(conf.Modbus.IntervalSec) * time.Second)
 		}
@@ -124,9 +124,13 @@ func mqttConnect(conf Conf) (MQTT.Client, error) {
 	opts.AddBroker(conf.Mqtt.Addr)
 	opts.SetClientID(conf.Mqtt.ClientID)
 	opts.SetCleanSession(conf.Mqtt.CleanSession)
+	opts.SetWill(fmt.Sprintf("devs/%s/status", conf.Mqtt.ClientID), `{"value":0}`, byte(conf.Mqtt.Qos), false)
 	mqttClient := MQTT.NewClient(opts)
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
 		return nil, token.Error()
 	}
+	token := mqttClient.Publish(fmt.Sprintf("devs/%s/status", conf.Mqtt.ClientID), byte(conf.Mqtt.Qos), false, `{"value":1}`)
+	token.Wait()
+
 	return mqttClient, nil
 }
