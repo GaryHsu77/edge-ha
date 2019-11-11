@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -61,27 +60,47 @@ func main() {
 	}
 	log.Println("[*] configuration load success")
 
-	// modbus >>>
-	modbusClient, handler := modbusConnect(conf)
-	if modbusClient == nil || handler == nil {
-		panic(errors.New("create modbus client failed"))
-	}
-	log.Println("[*] modbus connected")
+	var mqttClient MQTT.Client
+	for {
+		if mqttClient != nil {
+			mqttClient.Disconnect(0)
+		}
 
-	// mqtt >>>
-	mqttClient, err := mqttConnect(conf)
-	if err != nil {
-		panic(err)
-	}
-	log.Println("[*] mqtt broker connected")
+		// mqtt >>>
+		mqttClient, err = mqttConnect(conf)
+		if err != nil {
+			log.Println("[error] create mqtt client failed")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		log.Println("[*] mqtt broker connected")
 
+		// modbus >>>
+		modbusClient, handler := modbusConnect(conf)
+		if modbusClient == nil || handler == nil {
+			log.Println("[error] create modbus client failed")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		log.Println("[*] modbus connected")
+
+		// run
+		run(conf, modbusClient, handler, mqttClient)
+
+		// stop
+		time.Sleep(1 * time.Second)
+		handler.Close()
+	}
+}
+
+func run(conf Conf, modbusClient modbus.Client, handler *modbus.TCPClientHandler, mqttClient MQTT.Client) {
 	for {
 		for _, t := range conf.Tags {
 			log.Printf("[*] tag[%s:%s] polling", t.SrcName, t.TagName)
 			results, err := modbusClient.ReadInputRegisters(uint16(t.Addr), uint16(t.Qty))
 			if err != nil {
 				log.Printf("polling tag:%s failed, err:%s", t.TagName, err.Error())
-				continue
+				return
 			}
 
 			valueBytes := []byte{0, 0, 0, 0}
@@ -109,7 +128,7 @@ func modbusConnect(conf Conf) (modbus.Client, *modbus.TCPClientHandler) {
 	handler.SlaveId = byte(conf.Modbus.DeviceID)
 	handler.Logger = log.New(os.Stdout, "modbus debug: ", log.LstdFlags)
 	if err := handler.Connect(); err != nil {
-		panic(errors.New("modbus connected failed"))
+		return nil, nil
 	}
 	defer handler.Close()
 	modbusClient := modbus.NewClient(handler)
@@ -124,7 +143,7 @@ func mqttConnect(conf Conf) (MQTT.Client, error) {
 	opts.AddBroker(conf.Mqtt.Addr)
 	opts.SetClientID(conf.Mqtt.ClientID)
 	opts.SetCleanSession(conf.Mqtt.CleanSession)
-	opts.SetWill(fmt.Sprintf("devs/%s/status", conf.Mqtt.ClientID), `{"value":0}`, byte(conf.Mqtt.Qos), false)
+	opts.SetWill(fmt.Sprintf("devs/%s/status", conf.Mqtt.ClientID), `{"value":0}`, byte(conf.Mqtt.Qos), true)
 	mqttClient := MQTT.NewClient(opts)
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
 		return nil, token.Error()
