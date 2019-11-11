@@ -10,5 +10,5 @@ ENV ARCH=${ARCH} \
 
 RUN dpkg --add-architecture ${ARCH} && \
     sed -i "s/deb.debian.org/cdn-fastly.deb.debian.org/" /etc/apt/sources.list && \
-    apt update && apt install -y --no-install-recommends \
+    apt update && apt install -y --no-install-recommends crossbuild-essential-armhf \
         mosquitto
