@@ -49,7 +49,7 @@ type out struct {
 }
 
 func main() {
-	data, err := ioutil.ReadFile("./data/client/configuration.json")
+	data, err := ioutil.ReadFile("/var/ha/data/client/configuration.json")
 	if err != nil {
 		panic(err)
 	}
@@ -63,7 +63,8 @@ func main() {
 	var mqttClient MQTT.Client
 	for {
 		if mqttClient != nil {
-			mqttClient.Disconnect(0)
+			log.Println("disconnect mqtt client")
+			mqttClient.Disconnect(250)
 		}
 
 		// mqtt >>>
@@ -73,6 +74,7 @@ func main() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
+
 		log.Println("[*] mqtt broker connected")
 
 		// modbus >>>
@@ -124,7 +126,7 @@ func run(conf Conf, modbusClient modbus.Client, handler *modbus.TCPClientHandler
 func modbusConnect(conf Conf) (modbus.Client, *modbus.TCPClientHandler) {
 	handler := modbus.NewTCPClientHandler(
 		fmt.Sprintf("%s:%d", conf.Modbus.Host, conf.Modbus.Port))
-	handler.Timeout = 10 * time.Second
+	handler.Timeout = 1 * time.Second
 	handler.SlaveId = byte(conf.Modbus.DeviceID)
 	handler.Logger = log.New(os.Stdout, "modbus debug: ", log.LstdFlags)
 	if err := handler.Connect(); err != nil {
@@ -142,7 +144,10 @@ func mqttConnect(conf Conf) (MQTT.Client, error) {
 	opts := MQTT.NewClientOptions()
 	opts.AddBroker(conf.Mqtt.Addr)
 	opts.SetClientID(conf.Mqtt.ClientID)
+	opts.SetKeepAlive(100 * time.Millisecond)
+	opts.SetConnectTimeout(3 * time.Second)
 	opts.SetCleanSession(conf.Mqtt.CleanSession)
+	opts.SetCleanSession(true)
 	opts.SetWill(fmt.Sprintf("devs/%s/status", conf.Mqtt.ClientID), `{"value":0}`, byte(conf.Mqtt.Qos), true)
 	mqttClient := MQTT.NewClient(opts)
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
