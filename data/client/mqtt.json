@@ -1,0 +1,9 @@
+{
+    "mqtt":{
+        "addr":"localhost:1883",
+        "topic": "/tags",
+        "clientId": "mydev1",
+        "cleanSession": true,
+        "qos":0
+    }
+}

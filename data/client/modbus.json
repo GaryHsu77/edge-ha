@@ -1,0 +1,24 @@
+{
+    "modbus":{
+        "host":"localhost",
+        "port":502,
+        "deviceId":1,
+        "intervalSec":1
+    },
+    "tags":[
+        {
+            "srcNmae": "dev1",
+            "tagNmae": "tag1",
+            "valueType": "int",
+            "addr": 0,
+            "qty": 2
+        },
+        {
+            "srcNmae": "dev1",
+            "tagNmae": "tag2",
+            "valueType": "int",
+            "addr": 2,
+            "qty": 2
+        }
+    ]
+}

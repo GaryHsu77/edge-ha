@@ -25,6 +25,11 @@ func (c *MosquittoCounter) Set(v float64) {
 	c.counter.Set(v)
 }
 
+// Get sets the value
+func (c *MosquittoCounter) Get() float64 {
+	return c.counter.Get()
+}
+
 // Describe simply sends the two Descs in the struct to the channel.
 func (c *MosquittoCounter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.Desc
@@ -48,4 +53,8 @@ func (c *counter) Set(v float64) {
 		panic(errors.New("counter cannot decrease in value"))
 	}
 	c.value = v
+}
+
+func (c *counter) Get() float64 {
+	return c.value
 }

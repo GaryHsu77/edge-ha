@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
+	"path/filepath"
 	"time"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
@@ -38,7 +40,10 @@ type mqttClient struct {
 type Conf struct {
 	Tags   []tag        `json:"tags"`
 	Modbus modbusClient `json:"modbus"`
-	Mqtt   mqttClient   `json:"mqtt"`
+}
+
+type mqttConf struct {
+	Mqtt mqttClient `json:"mqtt"`
 }
 
 type out struct {
@@ -48,14 +53,34 @@ type out struct {
 	Ts      string `json:"timestamp"`
 }
 
+var version = "0.0.7"
+
 func main() {
-	data, err := ioutil.ReadFile("/var/ha/data/client/configuration.json")
+	if len(os.Args) <= 1 {
+		fmt.Println(version)
+		return
+	}
+
+	configPath := os.Args[1]
+	log.Println(configPath)
+
+	dir, _ := path.Split(configPath)
+
+	modbusData, err := ioutil.ReadFile(filepath.Join(dir, "modbus.json"))
+	if err != nil {
+		panic(err)
+	}
+	mqttData, err := ioutil.ReadFile(filepath.Join(dir, "mqtt.json"))
 	if err != nil {
 		panic(err)
 	}
 
-	var conf Conf
-	if err := json.Unmarshal(data, &conf); err != nil {
+	var modbusC Conf
+	if err := json.Unmarshal(modbusData, &modbusC); err != nil {
+		panic(err)
+	}
+	var mqttC mqttConf
+	if err := json.Unmarshal(mqttData, &mqttC); err != nil {
 		panic(err)
 	}
 	log.Println("[*] configuration load success")
@@ -68,7 +93,7 @@ func main() {
 		}
 
 		// mqtt >>>
-		mqttClient, err = mqttConnect(conf)
+		mqttClient, err = mqttConnect(mqttC)
 		if err != nil {
 			log.Println("[error] create mqtt client failed")
 			time.Sleep(1 * time.Second)
@@ -78,7 +103,7 @@ func main() {
 		log.Println("[*] mqtt broker connected")
 
 		// modbus >>>
-		modbusClient, handler := modbusConnect(conf)
+		modbusClient, handler := modbusConnect(modbusC)
 		if modbusClient == nil || handler == nil {
 			log.Println("[error] create modbus client failed")
 			time.Sleep(1 * time.Second)
@@ -87,7 +112,7 @@ func main() {
 		log.Println("[*] modbus connected")
 
 		// run
-		run(conf, modbusClient, handler, mqttClient)
+		run(mqttC, modbusC, modbusClient, handler, mqttClient)
 
 		// stop
 		time.Sleep(1 * time.Second)
@@ -95,11 +120,11 @@ func main() {
 	}
 }
 
-func run(conf Conf, modbusClient modbus.Client, handler *modbus.TCPClientHandler, mqttClient MQTT.Client) {
+func run(mqttC mqttConf, modbusC Conf, modbusClient modbus.Client, handler *modbus.TCPClientHandler, mqttClient MQTT.Client) {
 	for {
-		for _, t := range conf.Tags {
+		for _, t := range modbusC.Tags {
 			log.Printf("[*] tag[%s:%s] polling", t.SrcName, t.TagName)
-			results, err := modbusClient.ReadInputRegisters(uint16(t.Addr), uint16(t.Qty))
+			results, err := modbusClient.ReadHoldingRegisters(uint16(t.Addr), uint16(t.Qty))
 			if err != nil {
 				log.Printf("polling tag:%s failed, err:%s", t.TagName, err.Error())
 				return
@@ -116,9 +141,11 @@ func run(conf Conf, modbusClient modbus.Client, handler *modbus.TCPClientHandler
 				time.Now().Format(time.RFC3339),
 			}
 			o, _ := json.Marshal(i)
-			token := mqttClient.Publish(fmt.Sprintf("devs/%s/tags/%s", conf.Mqtt.ClientID, t.TagName), byte(conf.Mqtt.Qos), false, o)
+			token := mqttClient.Publish(fmt.Sprintf("devs/%s/tags/%s", mqttC.Mqtt.ClientID, t.TagName), byte(mqttC.Mqtt.Qos), false, o)
 			token.Wait()
-			time.Sleep(time.Duration(conf.Modbus.IntervalSec) * time.Second)
+			token = mqttClient.Publish(fmt.Sprintf("devs/%s/status", mqttC.Mqtt.ClientID), byte(mqttC.Mqtt.Qos), false, `{"value":1}`)
+			token.Wait()
+			time.Sleep(time.Duration(modbusC.Modbus.IntervalSec) * time.Second)
 		}
 	}
 }
@@ -140,10 +167,9 @@ func modbusConnect(conf Conf) (modbus.Client, *modbus.TCPClientHandler) {
 	return modbusClient, handler
 }
 
-func mqttConnect(conf Conf) (MQTT.Client, error) {
+func mqttConnect(conf mqttConf) (MQTT.Client, error) {
 	opts := MQTT.NewClientOptions()
 	opts.AddBroker(conf.Mqtt.Addr)
-	opts.SetClientID(conf.Mqtt.ClientID)
 	opts.SetKeepAlive(100 * time.Millisecond)
 	opts.SetConnectTimeout(3 * time.Second)
 	opts.SetCleanSession(conf.Mqtt.CleanSession)
@@ -153,8 +179,5 @@ func mqttConnect(conf Conf) (MQTT.Client, error) {
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
 		return nil, token.Error()
 	}
-	token := mqttClient.Publish(fmt.Sprintf("devs/%s/status", conf.Mqtt.ClientID), byte(conf.Mqtt.Qos), false, `{"value":1}`)
-	token.Wait()
-
 	return mqttClient, nil
 }

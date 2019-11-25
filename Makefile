@@ -17,9 +17,11 @@ BUILDNUM           ?= $(DRONE_BUILD_NUMBER)
 
 VERSION = 0.0.1
 
-.PHONY: client
+.PHONY: client modbus
 client:
 	$(GOCGO) build $(GOFLAGS) -ldflags "-X main.VERSION=$(VERSION)" -o ./build/$(ARCH)/ha-slave ./cmd/client
+modbus:
+	$(GOCGO) build $(GOFLAGS) -ldflags "-X main.VERSION=$(VERSION)" -o ./build/$(ARCH)/modbus ./cmd/modbus
 
 .PHONY: mqtt-exporter cloud-build cloud-run cloud-stop
 mqtt-exporter:
